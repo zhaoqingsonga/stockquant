@@ -1,0 +1,16 @@
+Package: stockquant
+Type: Package
+Title: Processing stocks data
+Version: 0.1.0
+Author: Zhao Qingsong(zhaoqingsonga@163.com)
+Maintainer: Zhao Qingsong <zhaoqingsonga@163.com>
+Description: This package provides stock prediction functionalities using historical stock data.
+License: MIT + file LICENSE
+Imports:
+    quantmod, TTR, dplyr, ggplot2, xts, openxlsx,tidyverse
+Suggests:
+    devtools
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.2
+

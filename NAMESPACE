@@ -1,0 +1,3 @@
+exportPattern("^[[:alpha:]]+")
+import(quantmod, TTR, xts, ggplot2, openxlsx,tidyverse)
+
