@@ -63,6 +63,7 @@ getListStocks <- function(stocklist = c("600104.SS", "600028.SS"),
                           end = Sys.Date()) {
   listC <- list()
   for (iname in stocklist) {
+
     listC[[iname]] <- getStocks(iname, start, end)
     listC[[iname]]$name <- NA
     listC[[iname]]$name <- iname
