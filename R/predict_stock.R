@@ -244,5 +244,281 @@ stock_signal <- function(stock_data) {
 }
 
 
+#' 股票价格预测函数
+#'
+#' 使用 Prophet 模型对股票数据进行预测。此函数读取股票数据、拟合 Prophet 模型，并预测未来一段时间的股票价格。
+#'
+#' @param stock_data 数据框，包含股票历史数据。默认值为 `stock_data_ss50[["600048.SS"]]`。
+#' 数据框中需包含以下列：
+#'   - `Date`：日期列，表示股票的交易日期。
+#'   - `Adjusted`：调整后收盘价。
+#' @param prediction_period 整数，表示预测的天数。默认值为 30。
+#'
+#' @return 返回一个 xts 对象，包含预测的未来日期及相应的预测价格。
+#'
+#' @examples
+#' # 示例：对股票代码 "600048.SS" 的数据进行30天的预测
+#' result <- stock_prediction_prophet(stock_data = stock_data_ss50[["600048.SS"]], prediction_period = 30)
+#' print(result)
+#'
+#' @import prophet
+#' @import dplyr
+#' @export
+stock_prediction_prophet <- function(stock_data=stock_data_ss50[["600048.SS"]],
+                                     prediction_period = 30) {
+  library(prophet)
+  library(dplyr)
+
+  # 读取数据
+  data <- as.data.frame(stock_data)
+  stockname<-data$name[1]
+
+  data$Date <- rownames(data)
+  # 准备 prophet 模型需要的数据格式
+  df <- data %>%
+    select(ds = all_of("Date"), y = all_of("Adjusted")) %>%
+    mutate(ds = as.Date(ds))
+  # df$ds<-lubridate::with_tz(df$ds, tzone = "Asia/Shanghai")
+
+  # 创建并拟合 prophet 模型
+  m <- prophet()
+  m <- fit.prophet(m, df)
+
+  # 创建未来日期数据框
+  future <- make_future_dataframe(m, periods = prediction_period)
+
+  # 进行预测
+  forecast <- predict(m, future)
+
+  # 提取未来预测结果
+  future_forecast <- forecast %>%
+    filter(ds > max(df$ds)) %>%
+    select(ds, yhat) %>%
+    mutate(yhat = round(yhat, 2))
+  names(future_forecast)<-c("Date",stockname)
+  #转化为xts类型
+  xts_data <- xts(future_forecast[stockname], order.by = future_forecast$Date)
+  return(xts_data)
+}
+
+#' 股票价格预测函数（使用 Holt-Winters 模型）
+#'
+#' 该函数用于对给定的股票数据进行价格预测，主要使用 Holt-Winters 模型。
+#' 如果 Holt-Winters 模型拟合失败，将自动改用 ARIMA 模型进行预测。
+#'
+#' @param stock_data 股票数据，默认为 `stock_data_ss50[["600048.SS"]]`。
+#'                   数据应为包含日期和调整后价格的格式。
+#' @param prediction_period 预测的周期数，默认为 30 天。
+#'
+#' @return 返回一个 `xts` 对象，包含预测的未来日期和对应的股票价格。
+#'
+#' @import dplyr
+#' @import xts
+#' @import stats
+#' @import forecast
+#'
+#' @examples
+#' \dontrun{
+#' # 假设 stock_data_ss50 是已经存在的股票数据集
+#' result <- stock_prediction_hw(stock_data = stock_data_ss50[["600048.SS"]], prediction_period = 30)
+#' print(result)
+#' }
+#'
+#' 使用 Holt-Winters 或 ARIMA 模型预测股票价格
+#'
+#' 该函数使用 Holt-Winters 或 ARIMA 模型对股票数据进行预测。
+#' 如果 Holt-Winters 模型拟合失败，则尝试使用 ARIMA 模型。
+#'
+#' @param stock_data 包含股票数据的 xts 对象。
+#' @param prediction_period 预测周期，默认为 30 天。
+#' @param frequency 时间序列频率。如果为 NULL，则尝试自动检测。
+#' @param alpha Holt-Winters 模型的 alpha 参数，默认为 NULL，表示自动选择。
+#' @param beta Holt-Winters 模型的 beta 参数，默认为 NULL，表示自动选择。
+#' @param gamma Holt-Winters 模型的 gamma 参数，默认为 NULL，表示自动选择。
+#'
+#' @return 包含预测价格的 xts 对象。
+#'
+#' @examples
+#' # 假设 stock_data_ss50 是包含股票数据的 xts 对象
+#' predictions <- stock_prediction_hw(stock_data = stock_data_ss50[["600048.SS"]], prediction_period = 60)
+#' print(predictions)
+stock_prediction_hw <- function(stock_data = stock_data_ss50[["600048.SS"]], prediction_period = 30, frequency = NULL, alpha = NULL, beta = NULL, gamma = NULL) {
+  library(dplyr)
+  library(xts)
+  library(forecast)
+
+  # 读取数据
+  data <- as.data.frame(stock_data)
+  stockname <- data$name[1]  # 获取股票名称
+  data$Date <- rownames(data)
+
+  # 准备时间序列模型需要的数据格式
+  df <- data %>%
+    select(Date, Adjusted) %>%
+    mutate(Date = as.Date(Date))
+
+  # 清理数据，处理缺失值
+  df <- na.omit(df)
+
+  # 确定时间序列频率
+  if (is.null(frequency)) {
+    # 尝试自动检测频率（可能会出错，需要进一步处理）
+    frequency <- findfrequency(df$Adjusted)
+    if (frequency == 1) {
+      frequency <- 365 # 如果检测到频率为 1，则假设为日度数据
+    }
+  }
+
+  # 设置时间序列索引
+  ts_data <- ts(as.numeric(df$Adjusted), frequency = frequency, start = c(as.numeric(format(min(df$Date), "%Y")),
+                                                                          as.numeric(format(min(df$Date), "%m"))))
+
+  # 尝试使用 Holt-Winters 模型，并处理可能的错误
+  hw_model <- tryCatch({
+    HoltWinters(ts_data, alpha = alpha, beta = beta, gamma = gamma)
+  }, error = function(e) {
+    message("Error in HoltWinters model: ", e$message)
+    return(NULL)
+  })
+
+  # 如果 Holt-Winters 失败，尝试使用 ARIMA 模型
+  if (is.null(hw_model)) {
+    arima_model <- tryCatch({
+      auto.arima(ts_data)
+    }, error = function(e) {
+      message("Error in ARIMA model: ", e$message)
+      return(NULL)
+    })
+    if (is.null(arima_model)) {
+      stop("Both Holt-Winters and ARIMA models failed.")
+    }
+    forecast_result <- forecast(arima_model, h = prediction_period)
+  } else {
+    # 如果 Holt-Winters 成功，进行预测
+    forecast_result <- forecast(hw_model, h = prediction_period)
+  }
+
+  # 提取未来预测结果
+  future_forecast <- data.frame(
+    Date = seq(max(df$Date) + 1, by = "day", length.out = prediction_period),
+    Predicted_Price = round(forecast_result$mean, 2)
+  )
+
+  # 转化为 xts 类型
+  xts_data <- xts(future_forecast$Predicted_Price, order.by = future_forecast$Date)
+  colnames(xts_data) <- stockname
+  return(xts_data)
+}
+
+
+#error
+#' 股票价格预测函数（LSTM 时间序列方法）
+#'
+#' 使用 LSTM（长短期记忆网络）对股票数据进行预测。此函数读取股票数据并预测未来一段时间的股票价格。
+#'
+#' @param stock_data 数据框，包含股票历史数据。
+#' 数据框中需包含以下列：
+#'   - `Date`：日期列，表示股票的交易日期。
+#'   - `Adjusted`：调整后收盘价。
+#' @param prediction_period 整数，表示预测的天数。默认值为 30。
+#'
+#' @return 返回一个 xts 对象，包含预测的未来日期及相应的预测价格。
+#'
+#' @examples
+#' # 示例：对股票数据进行30天的预测
+#' result <- stock_prediction_lstm(stock_data = stock_data, prediction_period = 30)
+#' print(result)
+#'
+#' @import dplyr
+#' @import keras
+#' @import tensorflow
+#' @import xts
+#' @export
+stock_prediction_lstm <- function(stock_data, prediction_period = 30) {
+  library(dplyr)
+  library(keras)
+  library(tensorflow)
+  library(xts)
+
+  # 读取数据
+  data <- as.data.frame(stock_data)
+  stockname <- data$name[1]  # 获取股票名称
+
+  data$Date <- rownames(data)
+  # 准备 LSTM 模型需要的数据格式
+  df <- data %>%
+    select(Date, Adjusted) %>%
+    mutate(Date = as.Date(Date))
+
+  # 标准化数据
+  scaler <- function(x) (x - min(x)) / (max(x) - min(x))
+  inverse_scaler <- function(x, original) x * (max(original) - min(original)) + min(original)
+
+  scaled_data <- scaler(df$Adjusted)
+
+  # 创建时间序列数据集
+  create_dataset <- function(data, look_back) {
+    x <- list()
+    y <- list()
+    for (i in seq_len(length(data) - look_back)) {
+      x[[i]] <- data[i:(i + look_back - 1)]
+      y[[i]] <- data[i + look_back]
+    }
+    list(
+      x = array(unlist(x), dim = c(length(x), look_back, 1)),
+      y = array(unlist(y), dim = c(length(y), 1))
+    )
+  }
+
+  look_back <- 10
+  dataset <- create_dataset(scaled_data, look_back)
+
+  # 构建 LSTM 模型
+  model <- keras_model_sequential() %>%
+    layer_lstm(units = 50, input_shape = c(look_back, 1), return_sequences = FALSE) %>%
+    layer_dense(units = 1)
+
+  model %>% compile(
+    optimizer = "adam",
+    loss = "mean_squared_error"
+  )
+
+  # 训练模型
+  model %>% fit(
+    x = dataset$x,
+    y = dataset$y,
+    epochs = 50,
+    batch_size = 32,
+    verbose = 1
+  )
+
+  # 预测未来数据
+  predictions <- c()
+  input_seq <- tail(scaled_data, look_back)
+
+  for (i in 1:prediction_period) {
+    pred <- model %>% predict(array(input_seq, dim = c(1, look_back, 1)))
+    predictions <- c(predictions, pred)
+    input_seq <- c(input_seq[-1], pred)
+  }
+
+  # 反标准化预测结果
+  predicted_prices <- inverse_scaler(predictions, df$Adjusted)
+
+  # 创建预测结果数据框
+  future_forecast <- data.frame(
+    Date = seq(max(df$Date) + 1, by = "day", length.out = prediction_period),
+    Predicted_Price = round(predicted_prices, 2)
+  )
+
+  # 转化为 xts 类型
+  xts_data <- xts(future_forecast$Predicted_Price, order.by = future_forecast$Date)
+  colnames(xts_data) <- stockname
+
+  return(xts_data)
+}
+
+
+
 
 

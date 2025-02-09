@@ -40,6 +40,7 @@ plot_stock <- function(stockname = "600048.SS") {
   library(quantmod)
   chartSeries(ss001, name = paste("蜡烛图:", stockname), theme = chartTheme("white"))
 
+
   # 箱线图(残差)
   myboxplot <- boxplot(mydata$residuals, xlab = paste("残差箱线图:", stockname))
   abline(h = tail(mydata$residuals, 1), col = "red")
@@ -124,6 +125,125 @@ drawStockBoxplot.Adj<-function(df=getpoint_sz50[[1]]){
 }
 
 
+#' 绘制并保存多个股票数据的 Prophet 预测交互式图表到 HTML 文件
+#'
+#' 该函数接收包含多个股票数据的列表，为每个股票数据拟合 Prophet 模型进行预测，
+#' 生成交互式图表，并将所有图表整合到一个 HTML 文件中，同时为每个图表添加对应的股票名称作为标题。
+#'
+#' @param data 一个列表，列表中的每个元素代表一个股票的时间序列数据。
+#'             列表元素的名称将作为图表的标题。默认为 `stock_data_ss50`。
+#' @param filename 字符型，指定要保存的 HTML 文件的名称。默认为 `"fifty_plots.html"`。
+#'
+#' @return 无返回值，函数的主要作用是将生成的 HTML 文件保存到指定路径。
+#'
+#' @importFrom prophet prophet fit.prophet make_future_dataframe dyplot.prophet
+#' @importFrom htmltools tagList tags save_html
+#' @importFrom htmlwidgets as.tags
+#' @importFrom dplyr %>%
+#'
+#' @export
+plot_prophet <- function(data = stock_data_ss50, filename = "fifty_plots.html") {
+  library(prophet)
+  # 创建一个空列表用于存储图表
+  plots <- list()
 
-#
+  # 模拟生成 50 组数据并创建对应的 Prophet 模型和预测
+  for (iname in names(data)) {
+    # 生成模拟数据
+    data_sub <- data.frame(data[[iname]])
+    data_sub <- data.frame(ds = as.Date(rownames(data_sub)), y = as.numeric(data_sub$Adjusted))
 
+    # 创建并拟合 Prophet 模型
+    m <- prophet()
+    m <- fit.prophet(m, data_sub)
+
+    # 创建未来日期数据框并进行预测
+    future <- make_future_dataframe(m, periods = 30)
+    forecast <- predict(m, future)
+
+    # 生成交互式图表
+    plot <- dyplot.prophet(m, forecast)
+
+    # 将图表添加到列表中
+    plots[[iname]] <- plot
+  }
+
+  html_content <- htmltools::tagList(
+    tags$html(
+      tags$head(
+        tags$title("Stock Prophet Plots")
+      ),
+      tags$body(
+        mapply(function(plot_obj, stock_name) {
+          # 为每个图表添加标题和图表本身
+          htmltools::tagList(
+            tags$h3(stock_name),  # 显示股票名称作为标题
+            htmltools::as.tags(plot_obj)    # 将图表转换为 HTML 标签
+          )
+        }, plots, names(plots))
+      )
+    )
+  )
+
+  # 保存为 HTML 文件
+  htmltools::save_html(html_content, filename)
+}
+
+#' 绘制 Holt-Winters 预测图
+#'
+#' 该函数接收一个包含多个股票数据的列表，为每个股票数据使用 Holt-Winters 模型进行预测，并绘制交互式图表。
+#'
+#' @param data 包含多个股票数据的列表。每个元素是一个 xts 对象，表示股票的历史数据。
+#' @param prediction_period 预测的周期，默认为 30 天。
+#' @param filename 生成的 HTML 文件名，默认为 "hw_plots.html"。
+#'
+#' @return 返回保存预测图的 HTML 文件。
+#'
+#' @examples
+#' # 假设有一个包含 xts 对象的股票数据列表 stock_data
+#' plot_hw(data = stock_data, filename = "hw_stock_plots.html")
+plot_hw <- function(data=stock_data_ss50[1:2], prediction_period = 30, filename = "hw_plots.html") {
+  library(forecast)
+  library(dygraphs)
+  library(htmltools)
+
+  # 创建一个空列表用于存储图表
+  plots <- list()
+
+  # 对列表中的每个股票数据进行预测和绘图
+  for (iname in names(data)) {
+    # 提取当前股票数据
+    stock_data <- data[[iname]]
+
+    # 使用 stock_prediction_hw 函数进行预测
+    forecast_data <- stock_prediction_hw(stock_data, prediction_period)
+
+    # 生成交互式图表
+    plot <- dygraph(forecast_data, main = paste("预测图：", iname)) %>%
+      dyOptions(colors = RColorBrewer::brewer.pal(3, "Set1")) %>%
+      dySeries(name = iname, label = "预测价格")
+
+    # 将图表添加到列表中
+    plots[[iname]] <- plot
+  }
+
+  # 创建 HTML 内容
+  html_content <- tagList(
+    tags$html(
+      tags$head(
+        tags$title("Stock Holt-Winters Forecast Plots")
+      ),
+      tags$body(
+        mapply(function(plot_obj, stock_name) {
+          tagList(
+            tags$h3(stock_name),  # 显示股票名称作为标题
+            as.tags(plot_obj)      # 将图表转换为 HTML 标签
+          )
+        }, plots, names(plots))
+      )
+    )
+  )
+
+  # 保存为 HTML 文件
+  save_html(html_content, filename)
+}

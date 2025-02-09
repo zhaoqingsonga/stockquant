@@ -7,7 +7,7 @@ Maintainer: Zhao Qingsong <zhaoqingsonga@163.com>
 Description: This package provides stock prediction functionalities using historical stock data.
 License: MIT + file LICENSE
 Imports:
-    quantmod, TTR, dplyr, ggplot2, xts, openxlsx,tidyverse
+    quantmod, TTR, dplyr, ggplot2, xts, openxlsx,tidyverse,prophet,forecast
 Suggests:
     devtools
 Encoding: UTF-8
