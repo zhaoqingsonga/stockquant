@@ -264,7 +264,7 @@ stock_signal <- function(stock_data) {
 #' @import prophet
 #' @import dplyr
 #' @export
-stock_prediction_prophet <- function(stock_data=stock_data_ss50[["600048.SS"]],
+stock_prediction_prophet <- function(stock_data=stock_data_hs300[["603290.SS"]],
                                      prediction_period = 30) {
   library(prophet)
   library(dplyr)
@@ -277,7 +277,8 @@ stock_prediction_prophet <- function(stock_data=stock_data_ss50[["600048.SS"]],
   # 准备 prophet 模型需要的数据格式
   df <- data %>%
     select(ds = all_of("Date"), y = all_of("Adjusted")) %>%
-    mutate(ds = as.Date(ds))
+    mutate(ds = as.Date(ds),
+           y=as.numeric(y))
   # df$ds<-lubridate::with_tz(df$ds, tzone = "Asia/Shanghai")
 
   # 创建并拟合 prophet 模型
@@ -296,6 +297,11 @@ stock_prediction_prophet <- function(stock_data=stock_data_ss50[["600048.SS"]],
     select(ds, yhat) %>%
     mutate(yhat = round(yhat, 2))
   names(future_forecast)<-c("Date",stockname)
+  #加一天真实数据
+  last_true<-tail(df,1)
+  names(last_true)<-names(future_forecast)
+  last_true[,2]<-round(last_true[,2],2)
+  future_forecast<-rbind(last_true,future_forecast)
   #转化为xts类型
   xts_data <- xts(future_forecast[stockname], order.by = future_forecast$Date)
   return(xts_data)
@@ -355,7 +361,9 @@ stock_prediction_hw <- function(stock_data = stock_data_ss50[["600048.SS"]], pre
   # 准备时间序列模型需要的数据格式
   df <- data %>%
     select(Date, Adjusted) %>%
-    mutate(Date = as.Date(Date))
+    mutate(Date = as.Date(Date),
+           Adjusted=as.numeric(Adjusted)
+           )
 
   # 清理数据，处理缺失值
   df <- na.omit(df)
@@ -403,6 +411,12 @@ stock_prediction_hw <- function(stock_data = stock_data_ss50[["600048.SS"]], pre
     Date = seq(max(df$Date) + 1, by = "day", length.out = prediction_period),
     Predicted_Price = round(forecast_result$mean, 2)
   )
+
+  #加一天真实数据
+  last_true<-tail(df,1)
+  names(last_true)<-names(future_forecast)
+  last_true[,2]<-round(last_true[,2],2)
+  future_forecast<-rbind(last_true,future_forecast)
 
   # 转化为 xts 类型
   xts_data <- xts(future_forecast$Predicted_Price, order.by = future_forecast$Date)

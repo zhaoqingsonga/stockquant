@@ -169,15 +169,15 @@ plot_prophet <- function(data = stock_data_ss50, filename = "fifty_plots.html") 
   }
 
   html_content <- htmltools::tagList(
-    tags$html(
-      tags$head(
-        tags$title("Stock Prophet Plots")
+    htmltools::tags$html(
+      htmltools::tags$head(
+        htmltools::tags$title("Stock Prophet Plots")
       ),
-      tags$body(
+      htmltools::tags$body(
         mapply(function(plot_obj, stock_name) {
           # 为每个图表添加标题和图表本身
           htmltools::tagList(
-            tags$h3(stock_name),  # 显示股票名称作为标题
+            htmltools::tags$h3(stock_name),  # 显示股票名称作为标题
             htmltools::as.tags(plot_obj)    # 将图表转换为 HTML 标签
           )
         }, plots, names(plots))
