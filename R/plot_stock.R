@@ -189,6 +189,46 @@ plot_prophet <- function(data = stock_data_ss50, filename = "fifty_plots.html") 
   htmltools::save_html(html_content, filename)
 }
 
+#' 绘制单支股票的 Prophet 预测图表
+#'
+#' 此函数为指定股票生成 Prophet 预测，并使用 dyplot 绘制交互式图表。
+#' 它会获取股票数据，拟合 Prophet 模型，并为未来 30 天生成预测。
+#'
+#' @param stockname 字符串，指定股票代码（例如："600028.SS"）。
+#' @return 返回一个 dyplot 对象，显示 Prophet 预测结果。
+#' @export
+#' @import prophet
+#' @importFrom dygraphs dyplot.prophet
+#' @example
+#' plot <- plot_prophet_single("600028.SS")
+#' print(plot)
+#' @note 本函数依赖于 `prophet` 和 `dygraphs` 包，请确保已安装这些包。
+plot_prophet_single <- function(stockname = "600028.SS") {
+  library(prophet)
+  data <- getStocks(stockname)
+
+  # 生成模拟数据
+  data_sub <- data.frame(data)
+  data_sub <- data.frame(ds = as.Date(rownames(data_sub)), y = as.numeric(data_sub$Adjusted))
+
+  # 创建并拟合 Prophet 模型
+  m <- prophet()
+  m <- fit.prophet(m, data_sub)
+
+  # 创建未来日期数据框并进行预测
+  future <- make_future_dataframe(m, periods = 30)
+  forecast <- predict(m, future)
+
+  # 生成交互式图表
+  plot <- dyplot.prophet(m, forecast)
+  return(plot)
+}
+
+
+
+
+
+
 #' 绘制 Holt-Winters 预测图
 #'
 #' 该函数接收一个包含多个股票数据的列表，为每个股票数据使用 Holt-Winters 模型进行预测，并绘制交互式图表。
